@@ -97,18 +97,25 @@ def chat(request: ChatRequest):
             
             if func_name in ASYNC_TOOLS:
                 if task_id:
-                    # Submit to background runner
+                    # Submit to background runner with verification
+                    
+                    def wrap_verify(a_type, coro_fn):
+                        async def _wrapper():
+                            from app.verification import verify_result
+                            result = await coro_fn()
+                            return verify_result(a_type, payload, result)
+                        return _wrapper
+                    
                     if func_name == "simulate_slow_task":
-                        runner.submit(task_id, lambda: test_tools.simulate_slow_task(payload.get("seconds", 5)), timeout=timeout)
+                        runner.submit(task_id, wrap_verify("simulate_slow_task", lambda: test_tools.simulate_slow_task(payload.get("seconds", 5))), timeout=timeout)
                     elif func_name == "run_command":
                         from app.tools import dev_tools
-                        # dev_tools.run_command is already async
-                        runner.submit(task_id, lambda: dev_tools.run_command(
+                        runner.submit(task_id, wrap_verify("run_command", lambda: dev_tools.run_command(
                             payload.get("command"),
                             payload.get("args", []),
                             payload.get("cwd"),
                             timeout=timeout
-                        ), timeout=timeout)
+                        )), timeout=timeout)
                     elif func_name == "wait_for_task":
                         from app.waiting import wait_for_condition, TaskDoneCondition
                         w_timeout = payload.get("timeout", 60)
@@ -117,11 +124,11 @@ def chat(request: ChatRequest):
                             async def missing_err(): return {"success": False, "error": "missing task_id"}
                             runner.submit(task_id, missing_err)
                         else:
-                            runner.submit(task_id, lambda: wait_for_condition(TaskDoneCondition(wait_tid), timeout=w_timeout), timeout=timeout)
+                            runner.submit(task_id, wrap_verify("wait_for_task", lambda: wait_for_condition(TaskDoneCondition(wait_tid), timeout=w_timeout)), timeout=timeout)
                     elif func_name == "run_workflow":
                         from app.waiting import run_chained_workflow
                         steps = payload.get("steps", [])
-                        runner.submit(task_id, lambda: run_chained_workflow(steps, overall_timeout=timeout), timeout=timeout)
+                        runner.submit(task_id, wrap_verify("run_workflow", lambda: run_chained_workflow(steps, overall_timeout=timeout)), timeout=timeout)
                     elif func_name == "delegate_to_agent":
                         from app.agents import get_agent
                         agent_name = payload.get("agent_name")
@@ -130,7 +137,7 @@ def chat(request: ChatRequest):
                             async def err(): return {"success": False, "error": f"Agent {agent_name} not found"}
                             runner.submit(task_id, err)
                         else:
-                            runner.submit(task_id, lambda: agent.send_prompt(payload.get("prompt")), timeout=timeout)
+                            runner.submit(task_id, wrap_verify("delegate_to_agent", lambda: agent.send_prompt(payload.get("prompt"))), timeout=timeout)
                     elif func_name == "wait_for_agent":
                         from app.waiting import wait_for_condition, AgentDoneCondition
                         w_timeout = payload.get("timeout", 600)
@@ -140,7 +147,7 @@ def chat(request: ChatRequest):
                             async def err2(): return {"success": False, "error": "missing agent_name or handle"}
                             runner.submit(task_id, err2)
                         else:
-                            runner.submit(task_id, lambda: wait_for_condition(AgentDoneCondition(agent_name, handle), timeout=w_timeout), timeout=timeout)
+                            runner.submit(task_id, wrap_verify("wait_for_agent", lambda: wait_for_condition(AgentDoneCondition(agent_name, handle), timeout=w_timeout)), timeout=timeout)
                     elif func_name == "check_agent_status":
                         from app.agents import get_agent
                         agent_name = payload.get("agent_name")
@@ -157,13 +164,13 @@ def chat(request: ChatRequest):
                                     return {"success": True, "status": "FINISHED", "result": res}
                                 else:
                                     return {"success": True, "status": "PENDING", "description": agent.get_status_description(handle)}
-                            runner.submit(task_id, check_status, timeout=timeout)
+                            runner.submit(task_id, wrap_verify("check_agent_status", check_status), timeout=timeout)
                     else:
                         # Wrap synchronous file tool execution in a coroutine
                         async def wrap_sync_tool(fn_name=func_name, p=payload):
                             import asyncio
                             return await asyncio.to_thread(dispatcher.execute_tool, fn_name, p)
-                        runner.submit(task_id, wrap_sync_tool, timeout=timeout)
+                        runner.submit(task_id, wrap_sync_tool, timeout=timeout) # dispatcher already verifies
                         
                     result = {"success": True, "message": f"Task submitted to background runner with ID {task_id}. Tell the user the task has started and they can check on it later."}
                     executed_task_ids.append(task_id)
@@ -192,6 +199,11 @@ def chat(request: ChatRequest):
                 "name": func_name,
                 "content": json.dumps(result)
             })
+            
+        messages.append({
+            "role": "system",
+            "content": "IMPORTANT: If any tool result indicates that verification failed (verified=False or success=False due to verification), you MUST explicitly tell the user about the discrepancy. Never silently pass through a claimed success that verification contradicts (e.g. say 'The action reported success, but I could not confirm it in the system')."
+        })
             
         reply_msg = llm_client.get_completion(messages, use_tools=False)
 

@@ -37,50 +37,54 @@ def execute_tool(action_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     # 2. Dispatch to the specific tool
     try:
         if action_type == "get_cpu_usage":
-            return system_monitor.get_cpu_usage()
+            result = system_monitor.get_cpu_usage()
         elif action_type == "get_ram_usage":
-            return system_monitor.get_ram_usage()
+            result = system_monitor.get_ram_usage()
         elif action_type == "get_disk_usage":
             path = payload.get("path", "C:\\")
-            return system_monitor.get_disk_usage(path)
+            result = system_monitor.get_disk_usage(path)
         elif action_type == "get_gpu_usage":
-            return system_monitor.get_gpu_usage()
+            result = system_monitor.get_gpu_usage()
         elif action_type == "get_top_processes":
             n = payload.get("n", 5)
-            return system_monitor.get_top_processes(n)
+            result = system_monitor.get_top_processes(n)
         elif action_type == "get_network_status":
-            return system_monitor.get_network_status()
+            result = system_monitor.get_network_status()
         elif action_type == "check_task_status":
             task_id = payload.get("task_id")
             if task_id is None:
                 return {"success": False, "error": "Missing task_id"}
             from app.tools import task_tools
-            return task_tools.get_task_status(task_id)
+            result = task_tools.get_task_status(task_id)
         
         # File tools
         elif action_type == "list_files":
             from app.tools import file_tools
-            return file_tools.list_files(payload.get("folder"))
+            result = file_tools.list_files(payload.get("folder"))
         elif action_type == "read_file":
             from app.tools import file_tools
-            return file_tools.read_file(payload.get("path"), payload.get("max_bytes", 100_000))
+            result = file_tools.read_file(payload.get("path"), payload.get("max_bytes", 100_000))
         elif action_type == "create_file":
             from app.tools import file_tools
-            return file_tools.create_file(payload.get("path"), payload.get("content"))
+            result = file_tools.create_file(payload.get("path"), payload.get("content"))
         elif action_type == "write_file":
             from app.tools import file_tools
-            return file_tools.write_file(payload.get("path"), payload.get("content"), payload.get("mode", "overwrite"))
+            result = file_tools.write_file(payload.get("path"), payload.get("content"), payload.get("mode", "overwrite"))
         elif action_type == "rename_file":
             from app.tools import file_tools
-            return file_tools.rename_file(payload.get("old_path"), payload.get("new_path"))
+            result = file_tools.rename_file(payload.get("old_path"), payload.get("new_path"))
         elif action_type == "move_file":
             from app.tools import file_tools
-            return file_tools.move_file(payload.get("src"), payload.get("dest"))
+            result = file_tools.move_file(payload.get("src"), payload.get("dest"))
         elif action_type == "delete_file":
             from app.tools import file_tools
-            return file_tools.delete_file(payload.get("path"), payload.get("confirmation_token"))
+            result = file_tools.delete_file(payload.get("path"), payload.get("confirmation_token"))
             
         else:
-            return {"success": False, "error": f"Dispatcher has no handler mapped for '{action_type}'."}
+            result = {"success": False, "error": f"Dispatcher has no handler mapped for '{action_type}'."}
+            
+        from app.verification import verify_result
+        return verify_result(action_type, payload, result)
+        
     except Exception as e:
         return {"success": False, "error": f"Tool execution failed unexpectedly: {e}"}
