@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bunny Local Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --panel-bg: #1e1e1e;
+            --text-color: #e0e0e0;
+            --accent: #bb86fc;
+            --accent-hover: #9965f4;
+            --border: #333;
+            --user-msg: #3700b3;
+            --bot-msg: #2d2d2d;
+            --tool-msg: #1a1a2e;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+        }
+        #app {
+            display: flex;
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            gap: 20px;
+        }
+        .panel {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #chat-panel {
+            flex: 2;
+        }
+        #task-panel {
+            flex: 1;
+        }
+        .header {
+            padding: 15px;
+            border-bottom: 1px solid var(--border);
+            background-color: rgba(0,0,0,0.2);
+            font-weight: bold;
+            font-size: 1.1em;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .message {
+            max-width: 80%;
+            padding: 10px 15px;
+            border-radius: 15px;
+            line-height: 1.4;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+        .message.user {
+            background-color: var(--user-msg);
+            align-self: flex-end;
+            border-bottom-right-radius: 5px;
+        }
+        .message.assistant {
+            background-color: var(--bot-msg);
+            align-self: flex-start;
+            border-bottom-left-radius: 5px;
+            border: 1px solid var(--border);
+        }
+        .message.system {
+            background-color: var(--tool-msg);
+            align-self: center;
+            font-size: 0.9em;
+            color: #aaa;
+            font-style: italic;
+        }
+        .input-area {
+            padding: 15px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 10px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 12px;
+            background-color: #2a2a2a;
+            border: 1px solid var(--border);
+            color: white;
+            border-radius: 5px;
+            outline: none;
+        }
+        input[type="text"]:focus {
+            border-color: var(--accent);
+        }
+        button {
+            padding: 12px 20px;
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: var(--accent-hover);
+        }
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+        .task-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .task {
+            padding: 10px;
+            background-color: #252525;
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+        .task-id {
+            color: #888;
+        }
+        .status {
+            font-weight: bold;
+            font-size: 0.85em;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        .status.RUNNING { background: #3700b3; color: white; }
+        .status.DONE { background: #03dac6; color: black; }
+        .status.FAILED { background: #cf6679; color: black; }
+        .status.PENDING, .status.WAITING { background: #ff9800; color: black; }
+        
+        /* Markdown-like styling inside bot messages */
+        .message.assistant pre {
+            background: #111;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .message.assistant code {
+            font-family: monospace;
+            background: #111;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        #loading {
+            align-self: flex-start;
+            margin-left: 20px;
+            font-style: italic;
+            color: #888;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- Chat Panel -->
+        <div id="chat-panel" class="panel">
+            <div class="header">
+                Bunny Chat
+                <span style="font-size: 0.8em; font-weight: normal; color: #888;">Conversation: <span id="conv-id">...</span></span>
+            </div>
+            <div id="messages" class="messages">
+                <div class="message system">Welcome to the Bunny Local Dashboard.<br>This is a separate conversation from Telegram, but it shares the same backend, sandbox, and tools.</div>
+            </div>
+            <div id="loading">Bunny is typing...</div>
+            <form id="chat-form" class="input-area">
+                <input type="text" id="msg-input" placeholder="Ask Bunny to do something..." autocomplete="off" required>
+                <button type="submit" id="send-btn">Send</button>
+            </form>
+        </div>
+
+        <!-- Task Panel -->
+        <div id="task-panel" class="panel">
+            <div class="header">Background Tasks</div>
+            <div id="task-list" class="task-list">
+                <!-- Tasks injected here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SOURCE = "dashboard";
+        const EXTERNAL_CHAT_ID = "local";
+        let conversationId = null;
+
+        const msgsDiv = document.getElementById('messages');
+        const taskListDiv = document.getElementById('task-list');
+        const input = document.getElementById('msg-input');
+        const btn = document.getElementById('send-btn');
+        const loading = document.getElementById('loading');
+
+        // Note: The dashboard's conversation is a SEPARATE conversation_id from the Telegram one (different external_chat_id), by design.
+        // What IS shared: the same tasks table, same tools, same safety validator, same LM Studio backend.
+
+        async function init() {
+            try {
+                // We fetch history just to get the conversation initialized. The backend /chat endpoint
+                // does this automatically, but we can do it via a generic endpoint or by sending a quiet init ping.
+                // We'll create a dedicated endpoint for dashboard init to get the ID.
+                const res = await fetch(`/dashboard/init?source=${SOURCE}&external_chat_id=${EXTERNAL_CHAT_ID}`);
+                const data = await res.json();
+                conversationId = data.conversation_id;
+                document.getElementById('conv-id').textContent = conversationId;
+                
+                await loadHistory();
+                
+                // Start task poller
+                setInterval(pollTasks, 2000);
+                pollTasks();
+            } catch (e) {
+                console.error("Init failed:", e);
+                appendMsg("system", "Failed to connect to Bunny backend.");
+            }
+        }
+
+        async function loadHistory() {
+            if (!conversationId) return;
+            const res = await fetch(`/conversations/${conversationId}/history?limit=50`);
+            const data = await res.json();
+            
+            // Clear except welcome message
+            const welcome = msgsDiv.firstElementChild;
+            msgsDiv.innerHTML = '';
+            msgsDiv.appendChild(welcome);
+
+            // History comes back newest first, so reverse it
+            const msgs = data.messages.reverse();
+            for (let m of msgs) {
+                appendMsg(m.role === 'user' ? 'user' : 'assistant', m.content);
+            }
+        }
+
+        function appendMsg(role, content) {
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+            div.textContent = content; // Simple textContent to avoid XSS for now, though markdown parsing would be better
+            msgsDiv.appendChild(div);
+            msgsDiv.scrollTop = msgsDiv.scrollHeight;
+        }
+
+        document.getElementById('chat-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = input.value.trim();
+            if (!text) return;
+
+            appendMsg('user', text);
+            input.value = '';
+            input.disabled = true;
+            btn.disabled = true;
+            loading.style.display = 'block';
+            msgsDiv.scrollTop = msgsDiv.scrollHeight;
+
+            try {
+                const res = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        source: SOURCE,
+                        external_chat_id: EXTERNAL_CHAT_ID,
+                        message: text
+                    })
+                });
+                const data = await res.json();
+                
+                // Set conversation ID if not set
+                if (!conversationId) {
+                    conversationId = data.conversation_id;
+                    document.getElementById('conv-id').textContent = conversationId;
+                }
+                
+                appendMsg('assistant', data.reply);
+                pollTasks(); // Immediate poll
+            } catch (err) {
+                appendMsg('system', 'Error sending message: ' + err.message);
+            } finally {
+                input.disabled = false;
+                btn.disabled = false;
+                loading.style.display = 'none';
+                input.focus();
+            }
+        });
+
+        async function pollTasks() {
+            if (!conversationId) return;
+            try {
+                const res = await fetch(`/conversations/${conversationId}/tasks`);
+                const data = await res.json();
+                
+                taskListDiv.innerHTML = '';
+                
+                if (data.tasks.length === 0) {
+                    taskListDiv.innerHTML = '<div style="color:#666; font-style:italic;">No tasks yet</div>';
+                    return;
+                }
+
+                data.tasks.forEach(task => {
+                    const div = document.createElement('div');
+                    div.className = 'task';
+                    div.innerHTML = `
+                        <div class="task-header">
+                            <span class="task-id">#${task.id}</span>
+                            <span class="status ${task.status}">${task.status}</span>
+                        </div>
+                        <div style="margin-bottom: 5px;"><strong>${task.description}</strong></div>
+                        ${task.result ? `<div style="color: #aaa; font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; max-height: 40px;">${task.result}</div>` : ''}
+                    `;
+                    taskListDiv.appendChild(div);
+                });
+            } catch (e) {
+                console.error("Task polling failed", e);
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>

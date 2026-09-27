@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any
@@ -37,6 +38,11 @@ class ToolRequest(BaseModel):
 @app.get("/health")
 def health():
     return {"status": "ok", "message": "Bunny backend is running."}
+
+@app.get("/dashboard/init")
+def dashboard_init(source: str = Query(...), external_chat_id: str = Query(...)):
+    conversation_id = database.get_or_create_conversation(source, external_chat_id)
+    return {"conversation_id": conversation_id}
 
 @app.post("/chat")
 def chat(request: ChatRequest):
@@ -239,3 +245,6 @@ def get_task_endpoint(task_id: int):
 def get_conversation_tasks(conversation_id: int):
     tasks = database.get_tasks(conversation_id)
     return {"tasks": tasks}
+
+# Mount the static dashboard last
+app.mount("/dashboard", StaticFiles(directory="dashboard", html=True), name="dashboard")
