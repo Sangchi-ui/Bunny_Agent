@@ -11,20 +11,33 @@ from app import database, llm_client, safety
 from app.tools import dispatcher, test_tools
 from app.task_runner import runner
 
+from app.logging_config import logger
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("Starting Bunny backend...")
     database.init_db()
+    
+    # CRASH RECOVERY: Mark any tasks stuck in RUNNING as FAILED
+    try:
+        import sqlite3
+        from app.database import DB_PATH
+        with sqlite3.connect(DB_PATH) as conn:
+            c = conn.cursor()
+            c.execute("UPDATE tasks SET status = 'FAILED', result = 'Interrupted by server restart' WHERE status = 'RUNNING'")
+            count = c.rowcount
+            if count > 0:
+                logger.warning(f"Crash recovery: Marked {count} stuck RUNNING tasks as FAILED.")
+            conn.commit()
+    except Exception as e:
+        logger.error(f"Crash recovery failed: {e}")
+        
     await runner.start()
     yield
     await runner.stop()
+    logger.info("Bunny backend shutting down.")
 
 app = FastAPI(lifespan=lifespan)
-
-tool_logger = logging.getLogger("tools")
-tool_logger.setLevel(logging.INFO)
-th = logging.FileHandler(os.path.join(os.path.dirname(os.path.dirname(__file__)), "tool_calls.log"))
-th.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
-tool_logger.addHandler(th)
 
 class ChatRequest(BaseModel):
     source: str
@@ -67,7 +80,7 @@ def chat(request: ChatRequest):
             except Exception:
                 payload = {}
                 
-            tool_logger.info(f"Model attempting tool call: {func_name} with payload: {payload}")
+            logger.info(f"Model attempting tool call: {func_name} with payload: {payload}")
             
             # Create task
             from app.safety import ALLOWLIST
@@ -75,8 +88,9 @@ def chat(request: ChatRequest):
             timeout = ALLOWLIST.get(func_name, {}).get("timeout", 300)
             try:
                 task_id = database.create_task(conversation_id, f"Execute {func_name}", level)
+                logger.info(f"Created task {task_id} for tool {func_name}")
             except Exception as e:
-                tool_logger.error(f"Task creation failed: {e}")
+                logger.error(f"Task creation failed: {e}")
                 task_id = None
                 
             # Validating safety synchronously before we do anything

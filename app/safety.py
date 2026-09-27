@@ -4,14 +4,7 @@ from pathlib import Path
 from typing import Dict, Any, List
 from pydantic import BaseModel, field_validator, model_validator
 
-# Safety Logger Setup
-safety_logger = logging.getLogger("safety")
-safety_logger.setLevel(logging.INFO)
-file_handler = logging.FileHandler(os.path.join(os.path.dirname(os.path.dirname(__file__)), "safety.log"))
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-file_handler.setFormatter(formatter)
-safety_logger.addHandler(file_handler)
-
+from app.logging_config import logger
 # Allowed Root Folders - strictly limited
 from dotenv import load_dotenv
 load_dotenv()
@@ -182,5 +175,9 @@ def validate_action(request: ActionRequest) -> ValidationResult:
 
 def _log_and_return(allowed: bool, request: ActionRequest, reason: str) -> ValidationResult:
     result = "ALLOWED" if allowed else "DENIED"
-    safety_logger.info(f"[{result}] action={request.action_type} level={request.level} | Reason: {reason}")
+    log_msg = f"[{result}] action={request.action_type} level={request.level} | Reason: {reason}"
+    if allowed:
+        logger.info(log_msg)
+    else:
+        logger.warning(log_msg)
     return ValidationResult(allowed=allowed, reason=reason)

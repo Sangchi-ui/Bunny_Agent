@@ -3,6 +3,7 @@ import os
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+from app.logging_config import logger
 
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'bunny.db')
 
@@ -126,6 +127,7 @@ def update_task_status(task_id: int, status: str, result: Optional[str] = None) 
                 'UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?',
                 (status, now, task_id)
             )
+        logger.info(f"Task {task_id} status updated to {status}")
 
 def get_task(task_id: int) -> Optional[Dict[str, Any]]:
     with get_connection() as conn:

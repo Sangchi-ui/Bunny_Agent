@@ -5,16 +5,7 @@ import httpx
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
-
-# Load environment variables from .env if present
-load_dotenv()
-
-# Set up logging
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+from app.logging_config import logger
 
 # Config
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
