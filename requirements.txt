@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+pydantic
+requests
+python-telegram-bot==21.*
+python-dotenv
+psutil
+GPUtil
