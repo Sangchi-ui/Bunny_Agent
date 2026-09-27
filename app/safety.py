@@ -58,8 +58,9 @@ ALLOWLIST = {
     },
     "run_command": {
         "level": 2,
-        "allowed_commands": ["pytest", "npm", "git", "python", "uvicorn"],
-        "timeout": 60
+        "allowed_commands": ["pytest", "npm", "git", "python", "uvicorn", "node"],
+        "allowed_root_folders": ALLOWED_ROOT_FOLDERS,
+        "timeout": 120
     },
     "get_cpu_usage": {"level": 1, "timeout": 10},
     "get_ram_usage": {"level": 1, "timeout": 10},
@@ -105,7 +106,7 @@ def validate_action(request: ActionRequest) -> ValidationResult:
     # 4. File Path Checks
     if "allowed_root_folders" in rules:
         found_path = False
-        for key in ["path", "old_path", "new_path", "src", "dest", "folder"]:
+        for key in ["path", "old_path", "new_path", "src", "dest", "folder", "cwd"]:
             if key in request.payload:
                 found_path = True
                 target_path_str = request.payload[key]
@@ -136,12 +137,19 @@ def validate_action(request: ActionRequest) -> ValidationResult:
         if not command:
             return _log_and_return(False, request, "Payload missing 'command' for command action.")
             
-        # We only check the exact command executable name
-        # In a real payload, command might be the first arg or the whole string. 
-        # For this requirement: "checks the command is in ALLOWED_COMMANDS exactly"
-        # We will assume payload["command"] is the exact base command string (e.g., "pytest")
         if command not in rules["allowed_commands"]:
             return _log_and_return(False, request, f"Command '{command}' is not in ALLOWED_COMMANDS.")
+
+        # Check args for shell metacharacters
+        args = request.payload.get("args", [])
+        if not isinstance(args, list):
+            return _log_and_return(False, request, "Command args must be a list of strings.")
+            
+        metachars = [";", "&", "|", ">", "<", "`", "$("]
+        for arg in args:
+            for mc in metachars:
+                if mc in str(arg):
+                    return _log_and_return(False, request, f"Shell metacharacter '{mc}' is forbidden in args.")
 
     # Passed all checks
     return _log_and_return(True, request, "Action validated and allowed.")

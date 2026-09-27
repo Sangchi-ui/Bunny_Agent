@@ -206,6 +206,26 @@ TOOLS_SCHEMA = [
                 "required": ["path"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_command",
+            "description": "Execute a safe developer command in the workspace.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string", "description": "The command executable name (e.g. pytest, python)"},
+                    "args": {
+                        "type": "array", 
+                        "items": {"type": "string"},
+                        "description": "List of arguments to pass to the command"
+                    },
+                    "cwd": {"type": "string", "description": "Working directory for the command"}
+                },
+                "required": ["command", "args", "cwd"]
+            }
+        }
     }
 ]
 

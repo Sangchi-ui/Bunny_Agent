@@ -6,7 +6,7 @@ from typing import Optional, List, Dict, Any
 import os
 import json
 import logging
-from app import database, llm_client
+from app import database, llm_client, safety
 from app.tools import dispatcher, test_tools
 from app.task_runner import runner
 
@@ -72,14 +72,39 @@ def chat(request: ChatRequest):
             except Exception as e:
                 tool_logger.error(f"Task creation failed: {e}")
                 task_id = None
+                
+            # Validating safety synchronously before we do anything
+            request_obj = safety.ActionRequest(action_type=func_name, level=level, payload=payload)
+            validation = safety.validate_action(request_obj)
+            if not validation.allowed:
+                result = {"success": False, "error": f"Safety validation failed: {validation.reason}"}
+                if task_id:
+                    database.update_task_status(task_id, "FAILED", result=str(result["error"]))
+                    executed_task_ids.append(task_id)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.get("id", "call_123"),
+                    "name": func_name,
+                    "content": json.dumps(result)
+                })
+                continue
             
-            ASYNC_TOOLS = ["simulate_slow_task", "create_file", "write_file", "rename_file", "move_file", "delete_file"]
+            ASYNC_TOOLS = ["simulate_slow_task", "create_file", "write_file", "rename_file", "move_file", "delete_file", "run_command"]
             
             if func_name in ASYNC_TOOLS:
                 if task_id:
                     # Submit to background runner
                     if func_name == "simulate_slow_task":
                         runner.submit(task_id, lambda: test_tools.simulate_slow_task(payload.get("seconds", 5)), timeout=timeout)
+                    elif func_name == "run_command":
+                        from app.tools import dev_tools
+                        # dev_tools.run_command is already async
+                        runner.submit(task_id, lambda: dev_tools.run_command(
+                            payload.get("command"),
+                            payload.get("args", []),
+                            payload.get("cwd"),
+                            timeout=timeout
+                        ), timeout=timeout)
                     else:
                         # Wrap synchronous file tool execution in a coroutine
                         async def wrap_sync_tool(fn_name=func_name, p=payload):
