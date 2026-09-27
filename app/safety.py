@@ -69,7 +69,9 @@ ALLOWLIST = {
     "get_top_processes": {"level": 1, "timeout": 10},
     "get_network_status": {"level": 1, "timeout": 10},
     "check_task_status": {"level": 1, "timeout": 10},
-    "simulate_slow_task": {"level": 1, "timeout": 300}
+    "simulate_slow_task": {"level": 1, "timeout": 300},
+    "wait_for_task": {"level": 1, "timeout": 600},
+    "run_workflow": {"level": 2, "timeout": 3600}
 }
 
 class ActionRequest(BaseModel):

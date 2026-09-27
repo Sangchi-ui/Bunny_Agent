@@ -226,6 +226,46 @@ TOOLS_SCHEMA = [
                 "required": ["command", "args", "cwd"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "wait_for_task",
+            "description": "Wait for a specific task to reach a terminal state (DONE, FAILED, or BLOCKED).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "integer", "description": "The ID of the task to wait for"},
+                    "timeout": {"type": "integer", "description": "Timeout in seconds", "default": 60}
+                },
+                "required": ["task_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_workflow",
+            "description": "Run a chained sequence of tools, which can include waiting for tasks and executing other commands in order.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "steps": {
+                        "type": "array",
+                        "description": "List of tool steps to execute sequentially. Each step is an object with 'action_type' and 'payload'.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "action_type": {"type": "string"},
+                                "payload": {"type": "object"}
+                            },
+                            "required": ["action_type", "payload"]
+                        }
+                    }
+                },
+                "required": ["steps"]
+            }
+        }
     }
 ]
 

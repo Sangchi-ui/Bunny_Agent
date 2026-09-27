@@ -89,7 +89,7 @@ def chat(request: ChatRequest):
                 })
                 continue
             
-            ASYNC_TOOLS = ["simulate_slow_task", "create_file", "write_file", "rename_file", "move_file", "delete_file", "run_command"]
+            ASYNC_TOOLS = ["simulate_slow_task", "create_file", "write_file", "rename_file", "move_file", "delete_file", "run_command", "wait_for_task", "run_workflow"]
             
             if func_name in ASYNC_TOOLS:
                 if task_id:
@@ -105,6 +105,19 @@ def chat(request: ChatRequest):
                             payload.get("cwd"),
                             timeout=timeout
                         ), timeout=timeout)
+                    elif func_name == "wait_for_task":
+                        from app.waiting import wait_for_condition, TaskDoneCondition
+                        w_timeout = payload.get("timeout", 60)
+                        wait_tid = payload.get("task_id")
+                        if not wait_tid:
+                            async def missing_err(): return {"success": False, "error": "missing task_id"}
+                            runner.submit(task_id, missing_err)
+                        else:
+                            runner.submit(task_id, lambda: wait_for_condition(TaskDoneCondition(wait_tid), timeout=w_timeout), timeout=timeout)
+                    elif func_name == "run_workflow":
+                        from app.waiting import run_chained_workflow
+                        steps = payload.get("steps", [])
+                        runner.submit(task_id, lambda: run_chained_workflow(steps, overall_timeout=timeout), timeout=timeout)
                     else:
                         # Wrap synchronous file tool execution in a coroutine
                         async def wrap_sync_tool(fn_name=func_name, p=payload):
