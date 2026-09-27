@@ -71,7 +71,22 @@ ALLOWLIST = {
     "check_task_status": {"level": 1, "timeout": 10},
     "simulate_slow_task": {"level": 1, "timeout": 300},
     "wait_for_task": {"level": 1, "timeout": 600},
-    "run_workflow": {"level": 2, "timeout": 3600}
+    "run_workflow": {"level": 2, "timeout": 3600},
+    "delegate_to_agent": {
+        "level": 2, 
+        "timeout": 60,
+        "allowed_agents": ["cli_agent"]
+    },
+    "check_agent_status": {
+        "level": 1,
+        "timeout": 10,
+        "allowed_agents": ["cli_agent"]
+    },
+    "wait_for_agent": {
+        "level": 1,
+        "timeout": 600,
+        "allowed_agents": ["cli_agent"]
+    }
 }
 
 class ActionRequest(BaseModel):
@@ -152,6 +167,15 @@ def validate_action(request: ActionRequest) -> ValidationResult:
             for mc in metachars:
                 if mc in str(arg):
                     return _log_and_return(False, request, f"Shell metacharacter '{mc}' is forbidden in args.")
+
+    # 6. Agent Checks
+    if "allowed_agents" in rules:
+        agent_name = request.payload.get("agent_name")
+        if not agent_name:
+            return _log_and_return(False, request, "Payload missing 'agent_name' for agent action.")
+            
+        if agent_name not in rules["allowed_agents"]:
+            return _log_and_return(False, request, f"Agent '{agent_name}' is not in allowed agents list.")
 
     # Passed all checks
     return _log_and_return(True, request, "Action validated and allowed.")

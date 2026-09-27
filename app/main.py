@@ -89,7 +89,11 @@ def chat(request: ChatRequest):
                 })
                 continue
             
-            ASYNC_TOOLS = ["simulate_slow_task", "create_file", "write_file", "rename_file", "move_file", "delete_file", "run_command", "wait_for_task", "run_workflow"]
+            ASYNC_TOOLS = [
+                "simulate_slow_task", "create_file", "write_file", "rename_file", 
+                "move_file", "delete_file", "run_command", "wait_for_task", 
+                "run_workflow", "delegate_to_agent", "wait_for_agent", "check_agent_status"
+            ]
             
             if func_name in ASYNC_TOOLS:
                 if task_id:
@@ -118,6 +122,42 @@ def chat(request: ChatRequest):
                         from app.waiting import run_chained_workflow
                         steps = payload.get("steps", [])
                         runner.submit(task_id, lambda: run_chained_workflow(steps, overall_timeout=timeout), timeout=timeout)
+                    elif func_name == "delegate_to_agent":
+                        from app.agents import get_agent
+                        agent_name = payload.get("agent_name")
+                        agent = get_agent(agent_name)
+                        if not agent:
+                            async def err(): return {"success": False, "error": f"Agent {agent_name} not found"}
+                            runner.submit(task_id, err)
+                        else:
+                            runner.submit(task_id, lambda: agent.send_prompt(payload.get("prompt")), timeout=timeout)
+                    elif func_name == "wait_for_agent":
+                        from app.waiting import wait_for_condition, AgentDoneCondition
+                        w_timeout = payload.get("timeout", 600)
+                        agent_name = payload.get("agent_name")
+                        handle = payload.get("handle")
+                        if not agent_name or not handle:
+                            async def err2(): return {"success": False, "error": "missing agent_name or handle"}
+                            runner.submit(task_id, err2)
+                        else:
+                            runner.submit(task_id, lambda: wait_for_condition(AgentDoneCondition(agent_name, handle), timeout=w_timeout), timeout=timeout)
+                    elif func_name == "check_agent_status":
+                        from app.agents import get_agent
+                        agent_name = payload.get("agent_name")
+                        handle = payload.get("handle")
+                        agent = get_agent(agent_name)
+                        if not agent:
+                            async def err3(): return {"success": False, "error": f"Agent {agent_name} not found"}
+                            runner.submit(task_id, err3)
+                        else:
+                            async def check_status():
+                                finished = await agent.is_finished(handle)
+                                if finished:
+                                    res = await agent.get_result(handle)
+                                    return {"success": True, "status": "FINISHED", "result": res}
+                                else:
+                                    return {"success": True, "status": "PENDING", "description": agent.get_status_description(handle)}
+                            runner.submit(task_id, check_status, timeout=timeout)
                     else:
                         # Wrap synchronous file tool execution in a coroutine
                         async def wrap_sync_tool(fn_name=func_name, p=payload):

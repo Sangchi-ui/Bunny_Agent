@@ -60,6 +60,21 @@ class ProcessRunningCondition(WaitCondition):
                 
         return found == self.expected_running
 
+class AgentDoneCondition(WaitCondition):
+    def __init__(self, agent_name: str, handle: str):
+        self.agent_name = agent_name
+        self.handle = handle
+        
+    async def check(self) -> bool:
+        from app.agents import get_agent
+        agent = get_agent(self.agent_name)
+        if not agent:
+            return True # stop waiting if invalid agent
+        try:
+            return await agent.is_finished(self.handle)
+        except Exception:
+            return True
+
 async def wait_for_condition(condition: WaitCondition, poll_interval: int = 5, timeout: int = 600) -> Dict[str, Any]:
     start_time = time.time()
     while True:
@@ -100,6 +115,20 @@ async def run_chained_workflow(steps: List[Dict[str, Any]], overall_timeout: int
             res = await wait_for_condition(TaskDoneCondition(task_id), timeout=timeout)
             if not res.get("success"):
                 return {"success": False, "error": f"Step {i} wait_for_task failed: {res.get('error')}"}
+            results.append({"step": i, "action": action_type, "result": res})
+            continue
+            
+        if action_type == "wait_for_agent":
+            agent_name = payload.get("agent_name")
+            handle = payload.get("handle")
+            timeout = payload.get("timeout", 600)
+            
+            if not agent_name or not handle:
+                return {"success": False, "error": f"Step {i} missing agent_name or handle"}
+                
+            res = await wait_for_condition(AgentDoneCondition(agent_name, handle), timeout=timeout)
+            if not res.get("success"):
+                return {"success": False, "error": f"Step {i} wait_for_agent failed: {res.get('error')}"}
             results.append({"step": i, "action": action_type, "result": res})
             continue
 

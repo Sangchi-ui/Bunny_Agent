@@ -266,6 +266,52 @@ TOOLS_SCHEMA = [
                 "required": ["steps"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delegate_to_agent",
+            "description": "Delegate a prompt/task to a specified external agent.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "agent_name": {"type": "string", "description": "The name of the agent to delegate to (e.g. 'cli_agent')"},
+                    "prompt": {"type": "string", "description": "The task or prompt to send to the agent"}
+                },
+                "required": ["agent_name", "prompt"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_agent_status",
+            "description": "Check the status and get the result of a task delegated to an external agent.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "agent_name": {"type": "string", "description": "The name of the agent"},
+                    "handle": {"type": "string", "description": "The handle/ID of the delegated task"}
+                },
+                "required": ["agent_name", "handle"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "wait_for_agent",
+            "description": "Wait for an external agent to complete its task.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "agent_name": {"type": "string", "description": "The name of the agent"},
+                    "handle": {"type": "string", "description": "The handle/ID of the delegated task"},
+                    "timeout": {"type": "integer", "description": "Timeout in seconds", "default": 600}
+                },
+                "required": ["agent_name", "handle"]
+            }
+        }
     }
 ]
 
